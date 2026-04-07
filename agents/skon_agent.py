@@ -17,7 +17,7 @@ from state import GraphState
 from tools.web_search import web_search
 from tools.rag import RAGTool
 from config import DOCS_PATH, LLM_MODEL, LLM_TEMPERATURE, OPENAI_API_KEY
-from agents._extract_utils import extract_structured_data
+from agents.utils._extract_utils import extract_structured_data
 
 # ──────────────────────────────────────────────
 # Search queries
