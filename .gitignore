@@ -1,0 +1,8 @@
+.env
+
+/docs
+/__pycache__
+/.claude/
+/agents/__pycache__
+/tools/__pycache__
+/venv/
