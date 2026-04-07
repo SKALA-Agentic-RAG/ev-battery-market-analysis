@@ -5,6 +5,7 @@ Manages workflow flow and centralized routing with unified critic support.
 
 from typing import Literal, Dict, Any
 from state import GraphState
+from config import MAX_RETRIES
 
 
 def supervisor_node(state: GraphState) -> GraphState:
@@ -69,6 +70,34 @@ def supervisor_router(state: GraphState) -> Literal["market", "skon", "catl", "c
         return "__end__"
         
     return "__end__"
+
+
+def route_after_critic1(state: GraphState) -> Literal["skon", "catl", "collect_all", "analysis"]:
+    """critic1 결과에 따라 다음 노드를 결정."""
+    if state.get("critic1_pass"):
+        return "analysis"
+    target = state.get("critic1_retry_target", "both")
+    if target == "skon":
+        return "skon"
+    if target == "catl":
+        return "catl"
+    return "collect_all"
+
+
+def route_after_critic2(state: GraphState) -> Literal["analysis", "writer"]:
+    """critic2 결과에 따라 다음 노드를 결정."""
+    retry_count = int(state.get("critic2_retry_count") or 0)
+    if state.get("critic2_pass") or retry_count >= MAX_RETRIES:
+        return "writer"
+    return "analysis"
+
+
+def route_after_critic3(state: GraphState) -> Literal["writer", "output"]:
+    """critic3 결과에 따라 다음 노드를 결정."""
+    retry_count = int(state.get("critic3_retry_count") or 0)
+    if state.get("critic3_pass") or retry_count >= MAX_RETRIES:
+        return "output"
+    return "writer"
 
 
 class SupervisorAgent:

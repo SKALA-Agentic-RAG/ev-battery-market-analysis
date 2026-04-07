@@ -74,3 +74,17 @@ def output_agent_node(state: GraphState) -> Dict[str, Any]:
         print(f"[Output Agent] PDF 생성 실패: {e}")
 
     return {"current_task": "workflow_complete"}
+
+
+def output_verify_node(_state: GraphState) -> Dict[str, Any]:
+    """출력 결과물 존재 여부를 확인하는 검증 노드."""
+    import os
+    md_exists = os.path.exists("report.md")
+    pdf_exists = os.path.exists("report.pdf")
+    if md_exists:
+        print(f"[Output Verify] report.md 확인 완료")
+    if pdf_exists:
+        print(f"[Output Verify] report.pdf 확인 완료")
+    if not md_exists:
+        print("[Output Verify] 경고: report.md 없음")
+    return {"current_task": "output_verified"}
