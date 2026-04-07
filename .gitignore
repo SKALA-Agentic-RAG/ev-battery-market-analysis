@@ -1,6 +1,5 @@
 .env
 
-/docs
 __pycache__/
 /.claude/
 /.venv/
