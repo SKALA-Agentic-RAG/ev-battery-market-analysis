@@ -5,4 +5,4 @@
 /.claude/
 /agents/__pycache__
 /tools/__pycache__
-/venv/
+/.venv/
