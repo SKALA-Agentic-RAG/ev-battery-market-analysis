@@ -28,7 +28,9 @@ LLM_TEMPERATURE = 0
 EMBEDDING_MODEL = "BAAI/bge-m3"
 
 # Storage Paths
-VECTOR_DB_PATH = "./vectordb"
+# Store vector index artifacts under /rag by default.
+# Legacy fallback path ./vectordb is still supported in rag/rag_tool.py.
+VECTOR_DB_PATH = "./rag/vectordb"
 DOCS_PATH = "./docs"
 
 # Retry Configuration
