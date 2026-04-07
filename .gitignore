@@ -6,3 +6,6 @@
 /agents/__pycache__
 /tools/__pycache__
 /.venv/
+
+.pdf
+.md
