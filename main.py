@@ -56,9 +56,6 @@ def main():
         "critic2_feedback": "",
         "critic2_pass": False,
         "critic2_retry_count": 0,
-        "critic3_feedback": "",
-        "critic3_pass": False,
-        "critic3_retry_count": 0,
         "current_task": "start",
         "error_log": [],
     }
