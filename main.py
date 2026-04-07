@@ -14,6 +14,42 @@ BASE_DIR = Path(__file__).parent
 os.chdir(BASE_DIR)
 
 
+def _format_step_status(node_name: str, node_output) -> str:
+    """워크플로우 단계 로그를 상태 기반으로 사람이 읽기 쉽게 포맷팅."""
+    if not isinstance(node_output, dict):
+        return f"[{node_name}] 완료"
+
+    critic_pass_keys = {
+        "critic1": "critic1_pass",
+        "critic2": "critic2_pass",
+        "critic3": "critic3_pass",
+    }
+    pass_key = critic_pass_keys.get(node_name)
+
+    if pass_key:
+        passed = node_output.get(pass_key)
+        if passed is True:
+            return f"[{node_name}] 완료 (PASS)"
+        if passed is False:
+            retry_count = node_output.get(f"{node_name}_retry_count")
+            if node_name == "critic1":
+                target = node_output.get("critic1_retry_target", "none")
+                if retry_count is not None:
+                    return f"[{node_name}] 재시도 필요 (FAIL, target={target}, retry_count={retry_count})"
+                return f"[{node_name}] 재시도 필요 (FAIL, target={target})"
+            if retry_count is not None:
+                return f"[{node_name}] 재시도 필요 (FAIL, retry_count={retry_count})"
+            return f"[{node_name}] 재시도 필요 (FAIL)"
+
+    current_task = str(node_output.get("current_task", ""))
+    if current_task.endswith("force_pass"):
+        return f"[{node_name}] 완료 (FORCE PASS)"
+    if "error" in current_task.lower():
+        return f"[{node_name}] 완료 (ERROR)"
+
+    return f"[{node_name}] 완료"
+
+
 def main():
     """
     Main function to run the battery market analysis multi-agent system.
@@ -72,7 +108,7 @@ def main():
     try:
         for step in app.stream(initial_state, config):
             for node_name, node_output in step.items():
-                print(f"[{node_name}] 완료")
+                print(_format_step_status(node_name, node_output))
 
                 # Print any errors logged in this step
                 if isinstance(node_output, dict):

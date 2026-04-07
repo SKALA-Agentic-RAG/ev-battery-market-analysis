@@ -12,9 +12,9 @@ from agents.skon_agent import skon_agent_node
 from agents.catl_agent import catl_agent_node
 from agents.analysis_agent import analysis_agent_node
 from agents.writer_agent import writer_agent_node
-from agents.critic_agent import critic1_node, critic2_node
+from agents.critic_agent import critic1_node, critic2_node, critic3_node
 from agents.output_agent import output_agent_node
-from agents.supervisor import route_after_critic1, route_after_critic2
+from agents.supervisor import route_after_critic1, route_after_critic2, route_after_critic3
 
 
 def collect_all_node(state: GraphState) -> GraphState:
@@ -32,19 +32,34 @@ def collect_all_node(state: GraphState) -> GraphState:
     """
     print("[Collect All] 시장/SK On/CATL 데이터 병렬 수집 시작 (순차 실행)...")
 
-    # Step 1: Collect market data
-    state = market_agent_node(state)
-    print("[Collect All] 시장 데이터 수집 완료")
+    # Merge a partial-dict result from a sub-agent back into local state
+    def _merge(s: dict, result) -> dict:
+        if isinstance(result, dict):
+            return {**s, **result}
+        return s
+
+    # Step 1: Collect market data (skip if already collected on retry)
+    if state.get("market_context"):
+        print("[Collect All] 시장 데이터 기존 캐시 사용 (재수집 생략)")
+    else:
+        state = _merge(state, market_agent_node(state))
+        print("[Collect All] 시장 데이터 수집 완료")
 
     # Step 2: Collect SK On data
-    state = skon_agent_node(state)
+    state = _merge(state, skon_agent_node(state))
     print("[Collect All] SK On 데이터 수집 완료")
 
     # Step 3: Collect CATL data
-    state = catl_agent_node(state)
+    state = _merge(state, catl_agent_node(state))
     print("[Collect All] CATL 데이터 수집 완료")
 
-    return {**state, "current_task": "collect_all_complete"}
+    # Return only the data keys (exclude messages to prevent add_messages duplication)
+    return {
+        "market_context": state.get("market_context", ""),
+        "sk_on_data": state.get("sk_on_data", {}),
+        "catl_data": state.get("catl_data", {}),
+        "current_task": "collect_all_complete",
+    }
 
 
 def build_graph():
@@ -60,7 +75,7 @@ def build_graph():
             ↓ (conditional)
         analysis  (retry loop)
             ↓ (pass)
-        writer → output → END
+        writer → critic3 → output → END
 
     Returns:
         Compiled LangGraph application with MemorySaver checkpointer
@@ -76,6 +91,7 @@ def build_graph():
     workflow.add_node("analysis", analysis_agent_node)
     workflow.add_node("critic2", critic2_node)
     workflow.add_node("writer", writer_agent_node)
+    workflow.add_node("critic3", critic3_node)
     workflow.add_node("output", output_agent_node)
 
     # Entry point: start with data collection
@@ -119,8 +135,20 @@ def build_graph():
         },
     )
 
-    # Writer always proceeds to output
-    workflow.add_edge("writer", "output")
+    # Writer proceeds to critic3 for format/content review
+    workflow.add_edge("writer", "critic3")
+
+    # Conditional routing after critic3
+    # - If report passes: go to output
+    # - If not: retry writer with feedback
+    workflow.add_conditional_edges(
+        "critic3",
+        route_after_critic3,
+        {
+            "writer": "writer",
+            "output": "output",
+        },
+    )
 
     # Output completes the workflow
     workflow.add_edge("output", END)

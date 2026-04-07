@@ -9,6 +9,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from agents._util import truncate
 from agents.llm import get_chat_model
 from state import GraphState
+from config import MAX_RETRIES
 
 llm = get_chat_model()
 
@@ -19,16 +20,31 @@ _ANALYSIS_SYSTEM = """당신은 배터리 산업 전략 분석가입니다.
 다음을 Markdown으로 출력하세요:
 1) 동일 비교축(기술/시장/생산·투자/다각화)으로 SK On vs CATL 요약 비교
 2) Comparative SWOT: 3열 표 (SK On | CATL | 전략적 시사점)
-3) 주요 주장 뒤 (source: ...) 로 출처 표기 — 데이터에 있는 URL/문서명만 사용.
+3) 시계열 우위 판정: `단기(1년)`, `중기(1~3년)`, `장기(3년+)` 각각에 대해
+   - "우위 기업: SK On | CATL | 경합"
+   - 근거 2개 이상(수치/사실 기반)
+   - 신뢰도(상/중/하)
+4) 종합 판정: 아래 문장을 반드시 포함
+   - "종합 판정: 현재 기준 상대적으로 더 유리한 기업은 X다."
+   - 단, 전제가 바뀌면 판정이 달라질 수 있는 조건 1~2개 명시
+5) 주요 주장 뒤 (source: ...) 로 출처 표기 — 데이터에 있는 URL/문서명만 사용.
 """
 
 
 def analysis_agent_node(state: GraphState) -> dict:
     updates: dict = {"current_task": "T4_analysis"}
 
-    # 2차 검토 실패 후 재진입 시 재시도 카운트 증가 (설계: 최대 2회)
-    if state.get("critic2_feedback") and not state.get("critic2_pass"):
-        updates["critic2_retry_count"] = int(state.get("critic2_retry_count") or 0) + 1
+    # critic2_node가 retry_count를 관리 — 여기서 중복 증가 없음
+    critic2_retry_count = int(state.get("critic2_retry_count") or 0)
+
+    # 강제 종료: LLM 재호출 한도 초과 시 기존 분석 유지
+    if critic2_retry_count >= MAX_RETRIES:
+        print(f"[T4 Analysis] LLM 재호출 {MAX_RETRIES}회 도달 → 강제 종료 (기존 분석 유지)")
+        existing = state.get("analysis_report", "")
+        if existing:
+            updates["analysis_report"] = existing
+        updates["current_task"] = "T4_analysis_force_exit"
+        return updates
 
     payload = {
         "market_context": state.get("market_context", ""),

@@ -85,17 +85,17 @@ def route_after_critic1(state: GraphState) -> Literal["skon", "catl", "collect_a
 
 
 def route_after_critic2(state: GraphState) -> Literal["analysis", "writer"]:
-    """critic2 결과에 따라 다음 노드를 결정."""
-    retry_count = int(state.get("critic2_retry_count") or 0)
-    if state.get("critic2_pass") or retry_count >= MAX_RETRIES:
+    """critic2 결과에 따라 다음 노드를 결정.
+    재시도 횟수 상한은 critic2_node 내부에서 force-pass로 처리."""
+    if state.get("critic2_pass"):
         return "writer"
     return "analysis"
 
 
 def route_after_critic3(state: GraphState) -> Literal["writer", "output"]:
-    """critic3 결과에 따라 다음 노드를 결정."""
-    retry_count = int(state.get("critic3_retry_count") or 0)
-    if state.get("critic3_pass") or retry_count >= MAX_RETRIES:
+    """critic3 결과에 따라 다음 노드를 결정.
+    재시도 횟수 상한은 critic3_node 내부에서 force-pass로 처리."""
+    if state.get("critic3_pass"):
         return "output"
     return "writer"
 

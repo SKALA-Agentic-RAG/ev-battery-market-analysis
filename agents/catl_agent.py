@@ -16,7 +16,7 @@ from typing import Any, Dict, List
 from state import GraphState
 from tools.web_search import web_search
 from tools.rag import RAGTool
-from config import DOCS_PATH, LLM_MODEL, LLM_TEMPERATURE, OPENAI_API_KEY
+from config import DOCS_PATH, LLM_MODEL, LLM_TEMPERATURE, OPENAI_API_KEY, MAX_RETRIES
 from agents.utils._extract_utils import extract_structured_data
 
 # ──────────────────────────────────────────────
@@ -84,10 +84,19 @@ def catl_agent_node(state: GraphState) -> GraphState:
     """
     print("[T3 CATL Agent] CATL 데이터 수집 시작...")
 
-    try:
-        retry_target = state.get("critic1_retry_target", "none")
-        is_retry = retry_target in ("catl", "both")
+    retry_target = state.get("critic1_retry_target", "none")
+    is_retry = retry_target in ("catl", "both")
+    critic1_retry_count = state.get("critic1_retry_count", 0)
 
+    # 강제 종료: RAG 재검색 한도 초과 시 기존 데이터 유지
+    if is_retry and critic1_retry_count >= MAX_RETRIES:
+        print(f"[T3 CATL Agent] RAG 재검색 {MAX_RETRIES}회 도달 → 강제 종료 (기존 데이터 유지)")
+        return {
+            "catl_data": state.get("catl_data", {}),
+            "current_task": "catl_force_exit",
+        }
+
+    try:
         queries = list(dict.fromkeys(CATL_PRIMARY_QUERIES + CATL_VERIFICATION_QUERIES))
         if is_retry:
             print("[T3 CATL Agent] 균형성 재검토 모드: LLM 보완 쿼리 생성...")
@@ -136,7 +145,6 @@ def catl_agent_node(state: GraphState) -> GraphState:
             print(f"[T3 CATL Agent] 데이터 부족 항목: {missing}")
 
         return {
-            **state,
             "catl_data": catl_data,
             "current_task": "catl_complete",
         }
@@ -145,7 +153,6 @@ def catl_agent_node(state: GraphState) -> GraphState:
         error_msg = f"[T3 CATL Agent] 오류 발생: {str(e)}"
         print(error_msg)
         return {
-            **state,
             "catl_data": {
                 "technology": [{"claim": "CATL 데이터 부족 (오류)", "value": None, "time_horizon": "unknown"}],
                 "strategy": [{"claim": "CATL 데이터 부족 (오류)", "value": None, "time_horizon": "unknown"}],
