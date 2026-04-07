@@ -4,6 +4,7 @@
 __pycache__/
 /.claude/
 /.venv/
+vectordb/
 
 *.pdf
 *.md
