@@ -197,6 +197,9 @@ def _search_rag(queries: List[str]) -> List[Dict]:
                 if key not in seen:
                     seen.add(key)
                     results.append(hit)
+                    score = hit.get("score", 0.0)
+                    source = hit.get("source", "")
+                    print(f"  [RAG SK On] score={score:.4f} | {source}")
         return results
     except Exception as e:
         print(f"[RAG SK On] 검색 실패: {e}")

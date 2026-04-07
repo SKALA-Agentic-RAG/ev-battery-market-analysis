@@ -953,6 +953,7 @@ def _compact_summary_to_half_page(draft: str, max_chars: int = 1100) -> str:
     section = ""
     core_msg_count = 0
     decision_count = 0
+    so_what_content_count = 0  # "한 줄 결론" 헤딩 다음 줄 내용 카운터
 
     for raw in lines:
         ln = raw.strip()
@@ -963,6 +964,7 @@ def _compact_summary_to_half_page(draft: str, max_chars: int = 1100) -> str:
 
         if "한 줄 결론" in ln:
             section = "so_what"
+            so_what_content_count = 0
             kept.append(_trim_line(raw, 180))
             continue
         if "핵심 메시지" in ln:
@@ -974,13 +976,20 @@ def _compact_summary_to_half_page(draft: str, max_chars: int = 1100) -> str:
             kept.append(raw)
             continue
 
+        # "한 줄 결론"이 별도 헤딩이고 내용이 다음 줄에 있는 경우: 최대 1줄 보존
+        if section == "so_what" and so_what_content_count < 1:
+            kept.append(_trim_line(raw, 180))
+            so_what_content_count += 1
+            continue
+
         if section == "core" and re.match(r"^\s*[-*]\s+", raw):
             if core_msg_count < 4:
                 kept.append(_trim_line(raw, 170))
             core_msg_count += 1
             continue
 
-        if section == "decision" and re.match(r"^\s*\d+\.\s+", raw):
+        # 번호 목록(1. 2. 3.)과 불릿(-/*) 모두 의사결정 포인트로 인정
+        if section == "decision" and re.match(r"^\s*([-*]|\d+\.)\s+", raw):
             if decision_count < 3:
                 kept.append(_trim_line(raw, 170))
             decision_count += 1
