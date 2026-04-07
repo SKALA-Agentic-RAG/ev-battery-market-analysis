@@ -8,10 +8,26 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents._util import truncate
 from agents.llm import get_chat_model
-from agents.prompts import WRITER_SYSTEM
 from state import GraphState
 
 llm = get_chat_model()
+
+_WRITER_SYSTEM = """당신은 전략 보고서 작가입니다. 지정 목차에 맞춰 Markdown 보고서 초안을 작성하세요.
+
+규칙:
+- 주어진 수집·분석 내용의 사실만 사용. 새 통계·날짜·내부 정보를 invent 하지 마세요.
+- SUMMARY, 본문(2~5장), REFERENCE 포함
+- 4장 SWOT는 T4 표를 유지하거나 다듬기만 하세요
+- REFERENCE는 데이터에 나온 출처만 중복 없이 정리
+
+목차:
+1. SUMMARY
+2. 배터리 시장 환경 변화
+3. 기업별 포트폴리오 다각화 전략 (3.1 SK On, 3.2 CATL)
+4. 핵심 전략 비교 및 Comparative SWOT
+5. 종합 시사점
+6. REFERENCE
+"""
 
 
 def writer_agent_node(state: GraphState) -> dict:
@@ -52,7 +68,7 @@ def writer_agent_node(state: GraphState) -> dict:
             )
 
     out = llm.invoke(
-        [SystemMessage(content=WRITER_SYSTEM), HumanMessage(content=human)]
+        [SystemMessage(content=_WRITER_SYSTEM), HumanMessage(content=human)]
     )
     text = out.content if isinstance(out.content, str) else str(out.content)
     updates["final_draft"] = text

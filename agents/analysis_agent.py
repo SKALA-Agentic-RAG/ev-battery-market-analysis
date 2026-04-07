@@ -8,10 +8,19 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents._util import truncate
 from agents.llm import get_chat_model
-from agents.prompts import ANALYSIS_SYSTEM
 from state import GraphState
 
 llm = get_chat_model()
+
+_ANALYSIS_SYSTEM = """당신은 배터리 산업 전략 분석가입니다.
+오직 제공된 수집 데이터(market_context, sk_on_data, catl_data)만 근거로 작성하세요.
+데이터에 없는 수치·날짜·시장점유율은 만들지 말고 "출처 확인 필요"라고 표시하세요.
+
+다음을 Markdown으로 출력하세요:
+1) 동일 비교축(기술/시장/생산·투자/다각화)으로 SK On vs CATL 요약 비교
+2) Comparative SWOT: 3열 표 (SK On | CATL | 전략적 시사점)
+3) 주요 주장 뒤 (source: ...) 로 출처 표기 — 데이터에 있는 URL/문서명만 사용.
+"""
 
 
 def analysis_agent_node(state: GraphState) -> dict:
@@ -38,7 +47,7 @@ def analysis_agent_node(state: GraphState) -> dict:
         )
 
     out = llm.invoke(
-        [SystemMessage(content=ANALYSIS_SYSTEM), HumanMessage(content=human)]
+        [SystemMessage(content=_ANALYSIS_SYSTEM), HumanMessage(content=human)]
     )
     content = out.content if isinstance(out.content, str) else str(out.content)
     updates["analysis_report"] = content
