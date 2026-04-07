@@ -3,6 +3,7 @@ Market Agent for analyzing the global battery/EV market.
 Uses web search to collect data and LLM to summarize findings.
 """
 
+import re
 import openai
 from state import GraphState
 from tools.web_search import web_search
@@ -36,18 +37,34 @@ def market_agent_node(state: GraphState) -> GraphState:
         results = web_search(query, max_results=3)
         all_search_results.extend(results)
         
-    # 2. Format search results for LLM
+    # 2. Format search results for LLM with Source IDs
     search_context = ""
+    source_map = {}
     for i, res in enumerate(all_search_results):
-        search_context += f"[{i+1}] {res.get('title')}\n"
+        src_id = f"MKT-SRC-{i+1}"
+        source_map[src_id] = {
+            "title": res.get("title", "제목 없음"),
+            "url": res.get("url", "")
+        }
+        search_context += f"[{src_id}] {res.get('title')}\n"
         search_context += f"URL: {res.get('url')}\n"
         search_context += f"Content: {res.get('content')[:1000]}\n\n"
         
     # 3. Construct prompt for LLM
+    source_list_str = "\n".join([f"- {sid}: {info['title']} ({info['url']})" for sid, info in source_map.items()])
+    
     prompt = f"""당신은 글로벌 전기차(EV) 및 배터리 시장 전문가입니다. 
 제공된 검색 결과를 바탕으로 현재 시장의 '캐즘(Chasm)' 현황을 분석하고 보고서를 작성해 주세요.
 
-[검색 결과]
+## 추출 규칙 (반드시 준수)
+1. **출처 인라인**: 각 주요 데이터나 주장에 대해 반드시 해당 [소스ID]를 문장 끝에 명시하세요. (예: "전기차 성장률은 20%로 둔화되었습니다 [MKT-SRC-1].")
+2. **정량 데이터 우선**: 수치(%, GWh, 조원, 억달러 등)가 있는 데이터를 우선적으로 활용하세요.
+3. **참고 문헌**: 보고서 마지막에 '참고 문헌(Sources)' 섹션을 포함하고, 사용된 출처들을 나열하세요.
+
+[출처 목록]
+{source_list_str}
+
+[검색 데이터]
 {search_context}
 
 [요구사항]
@@ -67,13 +84,23 @@ def market_agent_node(state: GraphState) -> GraphState:
         response = client.chat.completions.create(
             model=LLM_MODEL,
             messages=[
-                {"role": "system", "content": "당신은 전문적인 시장 분석가입니다. 객관적인 데이터에 기반하여 한국어로 보고서를 작성합니다."},
+                {"role": "system", "content": "당신은 전문적인 시장 분석가입니다. 객관적인 데이터에 기반하여 한국어로 보고서를 작성하며, 반드시 출처를 인용합니다."},
                 {"role": "user", "content": prompt}
             ],
             temperature=LLM_TEMPERATURE
         )
         
         market_analysis = response.choices[0].message.content
+
+        # 4. Post-process to convert [MKT-SRC-X] to clickable links
+        def replace_src(match):
+            sid = match.group(1)
+            info = source_map.get(sid)
+            if info:
+                return f"[[{info['title']}]({info['url']})]"
+            return match.group(0)
+
+        market_analysis = re.sub(r"\[(MKT-SRC-\d+)\]", replace_src, market_analysis)
         
     except Exception as e:
         error_msg = f"LLM 호출 오류: {str(e)}"
