@@ -28,6 +28,9 @@ class GraphState(TypedDict):
         critic2_feedback: Feedback from second critic (logic & consistency check)
         critic2_pass: Whether second critic check passed
         critic2_retry_count: Number of retries for second critic phase
+        critic3_feedback: Third critic (draft format & content vs TOC/analysis)
+        critic3_pass: Whether third critic check passed
+        critic3_retry_count: Retries after draft review (Writer loop)
         current_task: Current task being executed (for logging/debugging)
         error_log: List of error messages encountered during execution
     """
@@ -44,5 +47,8 @@ class GraphState(TypedDict):
     critic2_feedback: str
     critic2_pass: bool
     critic2_retry_count: int
+    critic3_feedback: str
+    critic3_pass: bool
+    critic3_retry_count: int
     current_task: str
     error_log: List[str]

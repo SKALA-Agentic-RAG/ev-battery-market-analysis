@@ -12,39 +12,40 @@ from agents.skon_agent import skon_agent_node
 from agents.catl_agent import catl_agent_node
 from agents.analysis_agent import analysis_agent_node
 from agents.writer_agent import writer_agent_node
-from agents.critic_agent import critic1_node, critic2_node
-from agents.output_agent import output_agent_node
-from agents.supervisor import route_after_critic1, route_after_critic2
+from agents.critic_agent import critic1_node, critic2_node, critic3_node
+from agents.output_agent import output_agent_node, output_verify_node
+from agents.supervisor import route_after_critic1, route_after_critic2, route_after_critic3
 
 
-def collect_all_node(state: GraphState) -> GraphState:
+def collect_all_node(state: GraphState) -> dict:
     """
-    Fan-out collection node that sequentially executes Market, SK On, and CATL agents.
-
-    LangGraph does not natively support parallel execution without the Send API,
-    so this node calls all three data collection agents sequentially within one node.
-
-    Args:
-        state: Current graph state
-
-    Returns:
-        Updated state with market_context, sk_on_data, and catl_data all populated
+    Market → SK On → CATL 순차 수집. 각 노드는 부분 업데이트 dict를 반환하므로
+    여기서 누적 병합하지 않으면 이후 단계에서 상태가 잘립니다.
     """
-    print("[Collect All] 시장/SK On/CATL 데이터 병렬 수집 시작 (순차 실행)...")
+    print("[Collect All] 시장/SK On/CATL 데이터 수집 시작 (순차 실행)...")
+    merged: dict = {**state}
 
-    # Step 1: Collect market data
-    state = market_agent_node(state)
+    delta = market_agent_node(merged)
+    if delta:
+        merged.update(delta)
     print("[Collect All] 시장 데이터 수집 완료")
 
-    # Step 2: Collect SK On data
-    state = skon_agent_node(state)
+    delta = skon_agent_node(merged)
+    if delta:
+        merged.update(delta)
     print("[Collect All] SK On 데이터 수집 완료")
 
-    # Step 3: Collect CATL data
-    state = catl_agent_node(state)
+    delta = catl_agent_node(merged)
+    if delta:
+        merged.update(delta)
     print("[Collect All] CATL 데이터 수집 완료")
 
-    return {**state, "current_task": "collect_all_complete"}
+    return {
+        "market_context": merged.get("market_context", ""),
+        "sk_on_data": merged.get("sk_on_data") or {},
+        "catl_data": merged.get("catl_data") or {},
+        "current_task": "collect_all_complete",
+    }
 
 
 def build_graph():
@@ -60,7 +61,7 @@ def build_graph():
             ↓ (conditional)
         analysis  (retry loop)
             ↓ (pass)
-        writer → output → END
+        writer → critic3 → (conditional) writer | output → output_verify → END
 
     Returns:
         Compiled LangGraph application with MemorySaver checkpointer
@@ -76,7 +77,9 @@ def build_graph():
     workflow.add_node("analysis", analysis_agent_node)
     workflow.add_node("critic2", critic2_node)
     workflow.add_node("writer", writer_agent_node)
+    workflow.add_node("critic3", critic3_node)
     workflow.add_node("output", output_agent_node)
+    workflow.add_node("output_verify", output_verify_node)
 
     # Entry point: start with data collection
     workflow.set_entry_point("collect_all")
@@ -119,11 +122,19 @@ def build_graph():
         },
     )
 
-    # Writer always proceeds to output
-    workflow.add_edge("writer", "output")
+    # Writer → 3차 검수(형식·내용) → 재작성 또는 PDF
+    workflow.add_edge("writer", "critic3")
+    workflow.add_conditional_edges(
+        "critic3",
+        route_after_critic3,
+        {
+            "writer": "writer",
+            "output": "output",
+        },
+    )
 
-    # Output completes the workflow
-    workflow.add_edge("output", END)
+    workflow.add_edge("output", "output_verify")
+    workflow.add_edge("output_verify", END)
 
     # Compile with memory checkpointer for state persistence
     memory = MemorySaver()
